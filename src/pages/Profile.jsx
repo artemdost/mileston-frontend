@@ -6,6 +6,8 @@ import { useLang, UI } from "../context/LangContext";
 import api from "../utils/api";
 import toast from "react-hot-toast";
 
+const STANDALONE = import.meta.env?.VITE_STANDALONE === "true";
+
 export default function Profile() {
   const { user, logout } = useAuth();
   const { account, balance, isConnected, signer, bindWallet, unbindWallet, connect } = useWeb3();
@@ -25,11 +27,29 @@ export default function Profile() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // В standalone-сборке backend отсутствует — таблицы пустые,
-      // история формируется on-chain (см. ProjectDetail/VotingPage).
-      try { const r = await api.get("/transactions"); setTransactions(r.data || []); } catch { setTransactions([]); }
-      if (user?.role === "author") {
-        try { const r = await api.get("/projects?author=me"); setProjects(r.data || []); } catch { setProjects([]); }
+      if (STANDALONE) {
+        // В standalone-сборке backend отсутствует — таблицы пустые;
+        // история формируется on-chain (см. ProjectDetail/VotingPage).
+        // Локальный demo-каталог собственных кампаний (см. CreateProject).
+        try {
+          const raw = localStorage.getItem("mileston.demo.projects");
+          const list = raw ? JSON.parse(raw) : [];
+          setProjects(Array.isArray(list)
+            ? list.filter((p) => !p.author_email || p.author_email === user?.email)
+            : []);
+        } catch { setProjects([]); }
+        setTransactions([]);
+      } else {
+        try {
+          const r = await api.get("/transactions");
+          setTransactions(Array.isArray(r.data) ? r.data : []);
+        } catch { setTransactions([]); }
+        if (user?.role === "author") {
+          try {
+            const r = await api.get("/projects?author=me");
+            setProjects(Array.isArray(r.data) ? r.data : []);
+          } catch { setProjects([]); }
+        }
       }
     } finally { setLoading(false); }
   };
