@@ -44,7 +44,13 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem("token");
     if (token) {
       api.get("/auth/me")
-        .then((res) => setUser(res.data.user || res.data))
+        .then((res) => {
+          const u = res.data?.user || res.data;
+          // Защита от SPA-fallback: если backend нет, axios получит HTML и
+          // res.data будет строкой / not-object — таких user'ов отбрасываем.
+          if (u && typeof u === "object" && u.email) setUser(u);
+          else { localStorage.removeItem("token"); setUser(null); }
+        })
         .catch(() => { localStorage.removeItem("token"); setUser(null); })
         .finally(() => setLoading(false));
     } else {
