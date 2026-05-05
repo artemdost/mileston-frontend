@@ -33,16 +33,25 @@ export default function Home() {
         const factory = await getFactoryContract(provider);
         const addresses = await factory.getCampaigns();
 
-        // Источник метаданных: backend API → fallback на статический /projects.json (для standalone)
+        // Источник метаданных: в standalone-режиме сразу /projects.json,
+        // иначе backend API с fallback
+        const isStandalone = import.meta.env?.VITE_STANDALONE === "true";
         let dbProjects = [];
-        try {
-          const r = await api.get("/projects");
-          dbProjects = r.data || [];
-        } catch {
+        if (isStandalone) {
           try {
             const r = await fetch("/projects.json");
             if (r.ok) dbProjects = await r.json();
           } catch {}
+        } else {
+          try {
+            const r = await api.get("/projects");
+            if (Array.isArray(r.data)) dbProjects = r.data;
+          } catch {
+            try {
+              const r = await fetch("/projects.json");
+              if (r.ok) dbProjects = await r.json();
+            } catch {}
+          }
         }
         const dbByAddr = {};
         for (const p of dbProjects) {

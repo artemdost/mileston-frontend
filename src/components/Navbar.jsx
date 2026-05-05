@@ -91,10 +91,10 @@ export default function Navbar() {
           {theme === "light" ? "◐" : "◑"}
         </button>
 
-        {user && account ? (
+        {account ? (
           <Wallet account={account} balance={balance} />
-        ) : user ? (
-          <button className="btn btn-soft btn-sm" onClick={connect}>
+        ) : (isStandalone || user) ? (
+          <button className="btn btn-primary btn-sm" onClick={connect}>
             {lang === "ru" ? "Подключить кошелёк" : "Connect wallet"}
           </button>
         ) : null}
