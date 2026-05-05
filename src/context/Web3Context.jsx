@@ -6,7 +6,10 @@ import { RainbowKitProvider, ConnectButton, getDefaultConfig, useConnectModal } 
 import { defineChain } from "viem";
 import api from "../utils/api";
 import { useAuth } from "./AuthContext";
+import { demoBindWallet, demoUnbindWallet, isStandalone as isStandaloneFn } from "../utils/demoStore";
 import "@rainbow-me/rainbowkit/styles.css";
+
+const STANDALONE = isStandaloneFn();
 
 // Production chain config from ENV (Vercel)
 const PROD_CHAIN_ID = Number(import.meta.env?.VITE_CHAIN_ID || 0);
@@ -113,11 +116,15 @@ function Web3Bridge({ children }) {
     if (!isConnected || !address || !user || !signer) {
       throw new Error("Кошелёк не подключён");
     }
-    const message = `CrowdFund: привязать кошелёк к аккаунту ${user.email}`;
+    const message = `Mileston: привязать кошелёк к аккаунту ${user.email}`;
     const signature = await signer.signMessage(message);
-    const res = await api.put("/auth/wallet", { wallet_address: address, signature });
+    if (STANDALONE) {
+      demoBindWallet(user.email, { address, signature });
+    } else {
+      await api.put("/auth/wallet", { wallet_address: address, signature });
+    }
     await refreshUser();
-    return res.data;
+    return { wallet_address: address, signature };
   }, [isConnected, address, user, signer, refreshUser]);
 
   // Unbind wallet: sign message to prove ownership, then remove
@@ -125,19 +132,25 @@ function Web3Bridge({ children }) {
     if (!user || !signer) {
       throw new Error("Кошелёк не подключён");
     }
-    const message = `CrowdFund: отвязать кошелёк от аккаунта ${user.email}`;
-    const signature = await signer.signMessage(message);
-    await api.post("/auth/wallet/unbind", { signature });
+    const message = `Mileston: отвязать кошелёк от аккаунта ${user.email}`;
+    await signer.signMessage(message);
+    if (STANDALONE) {
+      demoUnbindWallet(user.email);
+    } else {
+      await api.post("/auth/wallet/unbind", { signature: "" });
+    }
     await refreshUser();
     disconnect();
   }, [user, signer, refreshUser, disconnect]);
 
-  // Check if connected wallet matches bound wallet
+  // Если пользователь авторизован, кошелёк должен совпадать с привязанным.
+  // Без авторизации (анонимный режим) — подключённый кошелёк работает без проверки.
   const isBound = !!(user?.wallet_address);
   const isWalletMatched = isBound && address && user.wallet_address.toLowerCase() === address.toLowerCase();
-  const canTransact = isConnected && isWalletMatched;
+  const canTransact = isConnected && (user ? isWalletMatched : true);
+  const isKycVerified = !!(user?.kyc_verified);
 
-  // Guarded signer: only returns signer if wallet matches bound address
+  // Guarded signer: для авторизованного юзера требуем совпадение кошелька
   const guardedSigner = canTransact ? signer : null;
 
   const connect = useCallback(() => {
@@ -155,11 +168,12 @@ function Web3Bridge({ children }) {
     isBound,
     isWalletMatched,
     canTransact,
+    isKycVerified,
     bindWallet,
     unbindWallet,
     connect,
     disconnect,
-  }), [provider, guardedSigner, address, chain, balance, isConnected, isBound, isWalletMatched, canTransact, bindWallet, unbindWallet, connect, disconnect]);
+  }), [provider, guardedSigner, address, chain, balance, isConnected, isBound, isWalletMatched, canTransact, isKycVerified, bindWallet, unbindWallet, connect, disconnect]);
 
   return (
     <Web3Context.Provider value={value}>

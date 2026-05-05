@@ -14,6 +14,7 @@ import VotingPage from "./pages/VotingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/Profile";
+import Kyc from "./pages/Kyc";
 
 function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -69,6 +70,7 @@ function AppContent() {
           <Route path="/create" element={<ProtectedRoute role="author"><CreateProject /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute role="author"><Dashboard /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/kyc" element={<ProtectedRoute><Kyc /></ProtectedRoute>} />
           <Route path="/voting/:projectId/:milestoneIndex" element={<VotingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

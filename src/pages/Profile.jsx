@@ -25,12 +25,16 @@ export default function Profile() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // В standalone-сборке backend отсутствует — таблицы пустые,
+      // история формируется on-chain (см. ProjectDetail/VotingPage).
       try { const r = await api.get("/transactions"); setTransactions(r.data || []); } catch { setTransactions([]); }
       if (user?.role === "author") {
         try { const r = await api.get("/projects?author=me"); setProjects(r.data || []); } catch { setProjects([]); }
       }
     } finally { setLoading(false); }
   };
+
+  const kycStatus = user?.kyc?.status || (user?.kyc_verified ? "verified" : "none");
 
   const handleBind = async () => {
     setBinding(true);
@@ -105,6 +109,46 @@ export default function Profile() {
           <dt>{lang === "ru" ? "Регистрация" : "Joined"}</dt>
           <dd>{user.created_at ? new Date(user.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US") : "—"}</dd>
         </dl>
+      </div>
+
+      {/* KYC */}
+      <div className="card card-pad-lg mb-16">
+        <div className="kicker mb-8">{lang === "ru" ? "Верификация" : "Verification"}</div>
+        <div className="between mb-12" style={{ alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 260px" }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 6px" }}>
+              KYC
+            </h3>
+            <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+              {lang === "ru"
+                ? "Требуется для инвестирования и создания кампаний (FR-07). В demo-сборке используется заглушка."
+                : "Required to invest and create campaigns (FR-07). Demo build uses a stub."}
+            </p>
+          </div>
+          <div className="col" style={{ alignItems: "flex-end", gap: 8 }}>
+            {kycStatus === "verified" ? (
+              <span className="badge is-active">
+                <span className="badge-dot" />
+                {lang === "ru" ? "Верифицирован" : "Verified"}
+              </span>
+            ) : kycStatus === "pending" ? (
+              <span className="badge is-voting">
+                <span className="badge-dot" />
+                {lang === "ru" ? "На проверке" : "Pending"}
+              </span>
+            ) : (
+              <span className="badge is-completed">
+                <span className="badge-dot" />
+                {lang === "ru" ? "Не пройден" : "Not verified"}
+              </span>
+            )}
+            <Link to="/kyc" className="btn btn-soft btn-sm">
+              {kycStatus === "verified"
+                ? (lang === "ru" ? "Подробнее" : "Details")
+                : (lang === "ru" ? "Пройти KYC" : "Start KYC")}
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* Wallet */}

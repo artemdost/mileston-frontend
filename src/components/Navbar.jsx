@@ -39,14 +39,17 @@ export default function Navbar() {
 
   const tabs = [
     { id: "home", to: "/", label: NAV_LABELS.home, show: true },
-    // В standalone (без backend) скрываем auth-зависимые разделы;
-    // создание кампании в standalone доступно любому подключившему кошелёк
+    // В standalone-сборке поддерживаем оба сценария:
+    //   • анонимный — кампания доступна любому подключившему кошелёк;
+    //   • авторизованный — приоритет за ролью аккаунта.
     { id: "create", to: "/create", label: NAV_LABELS.create,
-      show: isStandalone ? !!account : (user && user.role === "author") },
+      show: isStandalone
+        ? (!!account || (user && user.role === "author"))
+        : (user && user.role === "author") },
     { id: "dashboard", to: "/dashboard", label: NAV_LABELS.dashboard,
-      show: !isStandalone && user && user.role === "author" },
+      show: user && user.role === "author" },
     { id: "profile", to: "/profile", label: NAV_LABELS.profile,
-      show: !isStandalone && !!user },
+      show: !!user },
   ];
 
   return (
@@ -99,7 +102,7 @@ export default function Navbar() {
           </button>
         ) : null}
 
-        {!isStandalone && user ? (
+        {user ? (
           <button
             onClick={handleLogout}
             className="btn btn-ghost btn-sm"
@@ -107,7 +110,7 @@ export default function Navbar() {
           >
             {lang === "ru" ? "Выйти" : "Sign out"}
           </button>
-        ) : !isStandalone ? (
+        ) : (
           <>
             <Link to="/login" className="btn btn-ghost btn-sm">
               {lang === "ru" ? "Войти" : "Sign in"}
@@ -116,7 +119,7 @@ export default function Navbar() {
               {lang === "ru" ? "Регистрация" : "Sign up"}
             </Link>
           </>
-        ) : null}
+        )}
       </div>
     </nav>
   );

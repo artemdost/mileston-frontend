@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../utils/api";
 import toast from "react-hot-toast";
+import {
+  demoCurrentUser, demoRegister, demoLogin, demoLogout,
+  isStandalone as isStandaloneFn,
+} from "../utils/demoStore";
 
 const AuthContext = createContext(null);
 
@@ -10,49 +14,56 @@ export function useAuth() {
   return ctx;
 }
 
+const STANDALONE = isStandaloneFn();
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Set up axios interceptor for the Authorization header
+  // Axios interceptor — нужен только для backend-сборки
   useEffect(() => {
+    if (STANDALONE) return;
     const interceptor = api.interceptors.request.use((config) => {
       const token = localStorage.getItem("token");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      if (token) config.headers.Authorization = `Bearer ${token}`;
       return config;
     });
-
-    return () => {
-      api.interceptors.request.eject(interceptor);
-    };
+    return () => api.interceptors.request.eject(interceptor);
   }, []);
 
-  // On mount, check if we have a stored token and fetch user info
+  // На старте: standalone — читаем сессию из localStorage; иначе — токен + /auth/me
   useEffect(() => {
+    if (STANDALONE) {
+      try {
+        const u = demoCurrentUser();
+        setUser(u);
+      } catch {}
+      setLoading(false);
+      return;
+    }
     const token = localStorage.getItem("token");
     if (token) {
-      api
-        .get("/auth/me")
-        .then((res) => {
-          setUser(res.data.user || res.data);
-        })
-        .catch(() => {
-          // Token is invalid or expired
-          localStorage.removeItem("token");
-          setUser(null);
-        })
+      api.get("/auth/me")
+        .then((res) => setUser(res.data.user || res.data))
+        .catch(() => { localStorage.removeItem("token"); setUser(null); })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
   }, []);
 
-  /**
-   * Log in with email and password.
-   */
   const login = useCallback(async (email, password) => {
+    if (STANDALONE) {
+      try {
+        const u = demoLogin({ email, password });
+        setUser(u);
+        toast.success("Вход выполнен (demo)");
+        return u;
+      } catch (err) {
+        toast.error(err.message || "Ошибка входа");
+        throw err;
+      }
+    }
     try {
       const res = await api.post("/auth/login", { email, password });
       const { token, user: userData } = res.data;
@@ -67,10 +78,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Register a new account.
-   */
   const register = useCallback(async (email, password, role) => {
+    if (STANDALONE) {
+      try {
+        const u = demoRegister({ email, password, role });
+        toast.success("Регистрация (demo). Войдите.");
+        return u;
+      } catch (err) {
+        toast.error(err.message || "Ошибка регистрации");
+        throw err;
+      }
+    }
     try {
       const res = await api.post("/auth/register", { email, password, role });
       toast.success("Регистрация успешна! Войдите в систему.");
@@ -82,28 +100,30 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Log out — clear token and user state.
-   */
   const logout = useCallback(() => {
+    if (STANDALONE) {
+      demoLogout();
+      setUser(null);
+      toast.success("Вы вышли из системы");
+      return;
+    }
     localStorage.removeItem("token");
     setUser(null);
     toast.success("Вы вышли из системы");
   }, []);
 
-  /**
-   * Refresh user data from API.
-   */
   const refreshUser = useCallback(async () => {
+    if (STANDALONE) {
+      try { setUser(demoCurrentUser()); } catch {}
+      return;
+    }
     try {
       const res = await api.get("/auth/me");
       setUser(res.data.user || res.data);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  const value = { user, setUser, loading, login, register, logout, refreshUser };
+  const value = { user, setUser, loading, login, register, logout, refreshUser, isStandalone: STANDALONE };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -4,8 +4,21 @@ import { ethers } from "ethers";
 import toast from "react-hot-toast";
 import api from "../utils/api";
 import { useWeb3 } from "../context/Web3Context";
+import { useAuth } from "../context/AuthContext";
 import { useLang, UI } from "../context/LangContext";
 import { getFactoryContract } from "../utils/contracts";
+
+const STANDALONE = import.meta.env?.VITE_STANDALONE === "true";
+
+function saveLocalProject(meta) {
+  try {
+    const key = "mileston.demo.projects";
+    const raw = localStorage.getItem(key);
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(meta);
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch {}
+}
 
 function emptyMilestone() {
   return { description: "", budget: "", duration: "" };
@@ -14,6 +27,7 @@ function emptyMilestone() {
 export default function CreateProject() {
   const navigate = useNavigate();
   const { signer, canTransact } = useWeb3();
+  const { user } = useAuth();
   const { lang, t } = useLang();
 
   const [step, setStep] = useState(1);
@@ -81,24 +95,31 @@ export default function CreateProject() {
     if (!canTransact) {
       toast.error(lang === "ru" ? "Подключите кошелёк" : "Connect wallet"); return;
     }
+    // FR-07: создание кампании автором требует пройденного KYC.
+    if (user && !user.kyc_verified) {
+      toast.error(lang === "ru" ? "Пройдите KYC перед созданием кампании" : "Complete KYC first");
+      navigate("/kyc"); return;
+    }
 
     setLoading(true);
     try {
-      const apiPayload = {
-        title: title.trim(),
-        description: description.trim(),
-        goal_amount: parseFloat(goal),
-        duration_days: parseInt(duration),
-        milestones: milestones.map(ms => ({
-          description: ms.description.trim(),
-          budget: parseFloat(ms.budget),
-          duration_days: parseInt(ms.duration),
-        })),
-      };
-
-      toast.loading(lang === "ru" ? "Сохранение…" : "Saving…", { id: "cp" });
-      const res = await api.post("/projects", apiPayload);
-      const projectData = res.data.project || res.data;
+      let projectData = null;
+      if (!STANDALONE) {
+        const apiPayload = {
+          title: title.trim(),
+          description: description.trim(),
+          goal_amount: parseFloat(goal),
+          duration_days: parseInt(duration),
+          milestones: milestones.map(ms => ({
+            description: ms.description.trim(),
+            budget: parseFloat(ms.budget),
+            duration_days: parseInt(ms.duration),
+          })),
+        };
+        toast.loading(lang === "ru" ? "Сохранение…" : "Saving…", { id: "cp" });
+        const res = await api.post("/projects", apiPayload);
+        projectData = res.data.project || res.data;
+      }
 
       toast.loading(lang === "ru" ? "Транзакция в блокчейне…" : "Sending tx…", { id: "cp" });
       const factory = await getFactoryContract(signer);
@@ -124,7 +145,7 @@ export default function CreateProject() {
         } catch {}
       }
 
-      if (campaignAddress && projectData._id) {
+      if (!STANDALONE && campaignAddress && projectData?._id) {
         try {
           await api.put(`/projects/${projectData._id}`, {
             contractAddress: campaignAddress, txHash: receipt.hash,
@@ -132,8 +153,28 @@ export default function CreateProject() {
         } catch {}
       }
 
+      // В standalone-режиме сохраняем метаданные кампании локально, чтобы Home
+      // мог показать её без backend (см. utils/demoStore — storage-only).
+      if (STANDALONE && campaignAddress) {
+        saveLocalProject({
+          contract_address: campaignAddress,
+          title: title.trim(),
+          description: description.trim(),
+          goal_amount: parseFloat(goal),
+          duration_days: parseInt(duration),
+          tx_hash: receipt.hash,
+          created_at: new Date().toISOString(),
+          author_email: user?.email || null,
+          milestones: milestones.map(ms => ({
+            description: ms.description.trim(),
+            budget: parseFloat(ms.budget),
+            duration_days: parseInt(ms.duration),
+          })),
+        });
+      }
+
       toast.success(lang === "ru" ? "Проект создан" : "Project created", { id: "cp" });
-      navigate(`/project/${campaignAddress || projectData._id}`);
+      navigate(`/project/${campaignAddress || projectData?._id}`);
     } catch (err) {
       const reason = err.reason || err.response?.data?.message || err.message || "Error";
       toast.error(reason, { id: "cp" });

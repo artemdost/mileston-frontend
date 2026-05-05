@@ -1,13 +1,17 @@
 import React, { useState } from "react";
 import { ethers } from "ethers";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useWeb3 } from "../context/Web3Context";
+import { useAuth } from "../context/AuthContext";
 import { useLang, UI } from "../context/LangContext";
 import { getCrowdFundContract } from "../utils/contracts";
 
 export default function InvestForm({ contractAddress, goalAmount, totalRaised, onInvested }) {
   const { signer, account, balance, canTransact } = useWeb3();
+  const { user } = useAuth();
   const { lang, t } = useLang();
+  const needsKyc = !!user && !user.kyc_verified;
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +23,10 @@ export default function InvestForm({ contractAddress, goalAmount, totalRaised, o
     e.preventDefault();
     if (!canTransact) {
       toast.error(lang === "ru" ? "Подключите кошелёк" : "Connect wallet");
+      return;
+    }
+    if (needsKyc) {
+      toast.error(lang === "ru" ? "Пройдите KYC перед инвестированием" : "Complete KYC first");
       return;
     }
     const ethAmount = parseFloat(amount);
@@ -93,15 +101,31 @@ export default function InvestForm({ contractAddress, goalAmount, totalRaised, o
 
         <button
           type="submit"
-          disabled={loading || !account || !amount}
+          disabled={loading || !account || !amount || needsKyc}
           className="btn btn-primary btn-lg btn-block mt-16"
         >
           {loading
             ? <span className="loading-spin" style={{ width: 14, height: 14, borderWidth: 2, borderTopColor: "var(--bg)" }} />
             : !account
               ? (lang === "ru" ? "Подключите кошелёк" : "Connect wallet")
-              : t(UI.invest)}
+              : needsKyc
+                ? (lang === "ru" ? "Требуется KYC" : "KYC required")
+                : t(UI.invest)}
         </button>
+
+        {needsKyc && (
+          <div style={{
+            marginTop: 12, padding: "10px 12px",
+            background: "var(--accent-soft)", borderRadius: "var(--radius)",
+            fontSize: 12.5, color: "var(--accent-ink)",
+            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12
+          }}>
+            <span>{lang === "ru" ? "Перед инвестированием требуется верификация (FR-07)." : "Verification required before investing (FR-07)."}</span>
+            <Link to="/kyc" className="btn btn-soft btn-sm">
+              {lang === "ru" ? "Пройти KYC" : "Start KYC"}
+            </Link>
+          </div>
+        )}
       </form>
     </div>
   );
