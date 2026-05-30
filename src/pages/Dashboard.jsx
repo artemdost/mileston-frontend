@@ -9,6 +9,7 @@ import { useLang, STATE_LABELS, UI } from "../context/LangContext";
 import { getCrowdFundContract } from "../utils/contracts";
 
 const STATE_KEYS = ["funding", "active", "completed", "failed"];
+const STANDALONE = import.meta.env?.VITE_STANDALONE === "true";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -25,18 +26,32 @@ export default function Dashboard() {
   const fetchProjects = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/projects", { params: { author: "me" } });
-      const data = res.data.projects || res.data || [];
+      let data = [];
+      if (STANDALONE) {
+        // standalone-сборка: backend нет, проекты автора - в localStorage (см. CreateProject)
+        try {
+          const raw = localStorage.getItem("mileston.demo.projects");
+          const list = raw ? JSON.parse(raw) : [];
+          data = Array.isArray(list)
+            ? list.filter((p) => !p.author_email || p.author_email === user?.email)
+            : [];
+        } catch { data = []; }
+      } else {
+        const res = await api.get("/projects", { params: { author: "me" } });
+        // защита от HTML-ответа (когда /api не проксируется на backend): берём только массив
+        const raw = res.data?.projects ?? res.data;
+        data = Array.isArray(raw) ? raw : [];
+      }
       setProjects(data);
 
       let raised = 0;
       let paid = 0;
       for (const p of data) {
-        raised += parseFloat(ethers.formatEther(p.totalRaised || "0"));
-        if (p.milestones) {
+        try { raised += parseFloat(ethers.formatEther(p.totalRaised || "0")); } catch {}
+        if (Array.isArray(p.milestones)) {
           for (const ms of p.milestones) {
             if (ms.status === 2) {
-              paid += parseFloat(ethers.formatEther(ms.budget || "0"));
+              try { paid += parseFloat(ethers.formatEther(ms.budget || "0")); } catch {}
             }
           }
         }
@@ -44,11 +59,11 @@ export default function Dashboard() {
       setStats({ totalRaised: raised, totalPaidOut: paid });
     } catch (err) {
       console.error("Failed to fetch:", err);
-      toast.error(lang === "ru" ? "Не удалось загрузить" : "Failed to load");
+      setProjects([]);
     } finally {
       setLoading(false);
     }
-  }, [lang]);
+  }, [lang, user]);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
