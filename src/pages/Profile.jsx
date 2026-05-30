@@ -293,8 +293,8 @@ export default function Profile() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 500 }}>{p.title}</div>
-                    <div className="kicker">{p.goal_amount} ETH</div>
+                    <div style={{ fontWeight: 500 }}>{String(p.title ?? "")}</div>
+                    <div className="kicker">{String(p.goal_amount ?? "")} ETH</div>
                   </div>
                   <span style={{ color: "var(--ink-4)" }}>→</span>
                 </Link>
